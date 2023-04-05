@@ -13,6 +13,8 @@ Find Cato
 
 Cato is invulnerable to damage but takes a little while to recharge. His attack inflicts strong damage
 
+As the player runs along glenfield road, zombies should spawn 
+
 # Development requirements
 ## Graphics
 ### Maps
