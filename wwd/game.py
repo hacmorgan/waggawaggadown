@@ -7,7 +7,6 @@ Main game logic
 
 
 from typing import Tuple
-from itertools import combinations
 
 import numpy as np
 import PIL.Image
@@ -150,6 +149,7 @@ class Game:
         else:
             self.screen_pos = self.best_effort_move(scroll_vector)
 
+        # Clamp coordinates within borders
         self.screen_pos.x = pygame.math.clamp(
             self.screen_pos.x,
             SCREEN_POS_X_LB - self.center_screen.x,
@@ -172,7 +172,7 @@ class Game:
         """
         Move background as far as possible in desired direction
         """
-        breakpoint()
+        # breakpoint()
         numpy_pos = self.pygame_pos_to_numpy(pos=self.screen_pos)
         move_distance = scroll_vector.magnitude() / BG_SCALE_FACTOR
         region_offset = pygame.Vector2(move_distance, move_distance)
@@ -185,8 +185,8 @@ class Game:
         free_space = region == 255
 
         # Construct array of positions that should correlate with free_space array mask
-        xs, ys = np.meshgrid(range(lby, uby), range(lbx, ubx))
-        xs, ys = xs[free_space.T], ys[free_space.T]
+        ys, xs = np.meshgrid(range(lby, uby), range(lbx, ubx))
+        ys, xs = ys[free_space.T], xs[free_space.T]
 
         if 0 in (len(xs), len(ys)):
             return self.screen_pos
