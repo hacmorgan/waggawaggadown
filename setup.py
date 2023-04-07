@@ -10,7 +10,7 @@ from setuptools import setup
 
 
 setup(
-    name="Wagga Wagga Down",
+    name="waggawaggadown",
     description="Silly small zombie game set in Wagga",
     author="Hamish Morgan",
     author_email="ham430@gmail.com",
