@@ -72,9 +72,12 @@ class Game:
         while running:
             # poll for events
             # pygame.QUIT event means the user clicked X to close your window
+            scroll_wheel = False
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.MOUSEWHEEL:
+                    scroll_wheel = True
 
             # Detect collisions (from last frame)
             player_enemy_collisions = pygame.sprite.groupcollide(
@@ -97,7 +100,7 @@ class Game:
             )
 
             # Get pressed keys
-            keys, sprint = self.check_keys()
+            keys, mouse_buttons, sprint = self.get_input()
 
             # Determine player/background movements
             scroll_delta = self.move_background(keys=keys, sprint=sprint)
@@ -106,6 +109,8 @@ class Game:
             self.player_group.update(
                 scroll_delta=scroll_delta,
                 player_enemy_collisions=player_enemy_collisions,
+                mouse_buttons=mouse_buttons,
+                scroll_wheel=scroll_wheel,
             )
             self.weapons_group.update(
                 scroll_delta=scroll_delta,
@@ -142,7 +147,7 @@ class Game:
 
         pygame.quit()
 
-    def check_keys(self) -> Tuple[Tuple[bool], bool]:
+    def get_input(self) -> Tuple[Tuple[bool], Tuple[bool], bool]:
         """
         Get keyboard input, check for sprinting
 
@@ -152,8 +157,9 @@ class Game:
         """
         keys = pygame.key.get_pressed()
         modifiers = pygame.key.get_mods()
+        mouse_buttons = pygame.mouse.get_pressed()
         sprint = modifiers & pygame.KMOD_SHIFT
-        return keys, sprint
+        return keys, mouse_buttons, sprint
 
     def move_background(self, keys: Tuple[bool], sprint: bool) -> None:
         """

@@ -4,7 +4,7 @@ Wagga Wagga Down character classes
 
 
 from enum import Enum
-from typing import Dict, Iterator, List
+from typing import Dict, Iterator, List, Tuple
 
 import pygame
 
@@ -29,6 +29,16 @@ class AnimationFrame(Enum):
     REGULAR = "FORWARD"
     LEFT_STEP = "LEFT_STEP"
     RIGHT_STEP = "RIGHT_STEP"
+
+
+class MouseButton(Enum):
+    """
+    Mouse button indices to pygame mouse return tuple
+    """
+
+    LEFT = 0
+    RIGHT = 1
+    MIDDLE = 2
 
 
 class Character(pygame.sprite.Sprite):
@@ -98,20 +108,38 @@ class Player(Character):
             pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=100
         )
         self.meelee_weapon = None
+        self.ranged_weapon = None
+        self.active_weapon = self.meelee_weapon
 
     def update(
         self,
         scroll_delta: pygame.Vector2,
         player_enemy_collisions: CollisionsDict,
+        mouse_buttons: Tuple[bool],
+        scroll_wheel: bool,
     ) -> None:
         """
         Update player
         """
+        # Check collisions
         if self in player_enemy_collisions:
             for _ in player_enemy_collisions[self]:
                 self.health -= ENEMY_COLLISION_DAMAGE
 
+        # Check weapons & keypresses
+        if scroll_wheel:
+            self.switch_weapon()
+        if self.active_weapon.can_attack and mouse_buttons[MouseButton.LEFT]:
+            self.active_weapon.attack()
+
+        # Perform generic character update
         super().update()
+
+    def switch_weapon(self) -> None:
+        """
+        Alternate between meelee and ranged weapon
+        """
+        if self.ac
 
 
 class Enemy(Character):
