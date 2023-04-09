@@ -12,6 +12,9 @@ import numpy as np
 import PIL.Image
 import pygame
 
+from wwd.characters import Player, Enemy
+from wwd.weapons import MeeleeWeapon, RangedWeapon
+
 
 BG_SCALE_FACTOR = 1.5
 SCROLL_DIST = 100
@@ -30,16 +33,13 @@ class Game:
         """
         Construct the game object
         """
+        # Initialise game
         pygame.init()
         self.screen = pygame.display.set_mode((1280, 720))
+        # TODO: loading screen
         self.clock = pygame.time.Clock()
 
-        self.center_screen = pygame.Vector2(
-            self.screen.get_width() / 2, self.screen.get_height() / 2
-        )
-        self.player_pos = self.center_screen.copy()
-        self.screen_pos = pygame.Vector2(HOME_X, HOME_Y)
-
+        # Load assets
         self.background = pygame.transform.smoothscale_by(
             pygame.image.load("../assets/combined_bg.png").convert(), BG_SCALE_FACTOR
         )
@@ -47,7 +47,22 @@ class Game:
             :, :, -1  # Mask is alpha channel
         ]
 
+        # Initialise variables
         self.dt = 0
+        self.center_screen = pygame.Vector2(
+            self.screen.get_width() / 2, self.screen.get_height() / 2
+        )
+        self.screen_pos = pygame.Vector2(HOME_X, HOME_Y)
+
+        # Initialise characters and groups
+        self.player = Player(pos=self.center_screen)
+        self.player_group = pygame.sprite.Group(self.player)
+        self.machete = MeeleeWeapon(
+            pos=self.player.pos + pygame.Vector2(self.player.rect.width / 2, 0)
+        )
+        self.weapons_group = pygame.sprite.Group(self.machete)
+        self.test_enemies = (Enemy(pos=self.center_screen / 2),)
+        self.enemies_group = pygame.sprite.Group(*self.test_enemies)
 
     def main_loop(self) -> None:
         """
@@ -61,17 +76,59 @@ class Game:
                 if event.type == pygame.QUIT:
                     running = False
 
+            # Detect collisions (from last frame)
+            player_enemy_collisions = pygame.sprite.groupcollide(
+                groupa=self.player_group,
+                groupb=self.enemies_group,
+                dokilla=False,
+                dokillb=False,
+            )
+            enemy_weapon_collisions = pygame.sprite.groupcollide(
+                groupa=self.enemies_group,
+                groupb=self.weapons_group,
+                dokilla=False,
+                dokillb=False,
+            )
+            weapon_enemy_collisions = pygame.sprite.groupcollide(
+                groupa=self.weapons_group,
+                groupb=self.enemies_group,
+                dokilla=False,
+                dokillb=False,
+            )
+
             # Get pressed keys
             keys, sprint = self.check_keys()
 
-            # Determine movements
-            self.move_player_or_background(keys=keys, sprint=sprint)
+            # Determine player/background movements
+            scroll_delta = self.move_background(keys=keys, sprint=sprint)
 
-            # Scroll the background
+            # Update logic
+            self.player_group.update(
+                scroll_delta=scroll_delta,
+                player_enemy_collisions=player_enemy_collisions,
+            )
+            self.weapons_group.update(
+                scroll_delta=scroll_delta,
+                weapon_enemy_collisions=weapon_enemy_collisions,
+            )
+            self.enemies_group.update(
+                scroll_delta=scroll_delta,
+                enemy_weapon_collisions=enemy_weapon_collisions,
+            )  # n.b. enemies must update after weapons
+
+            # End game if player is dead
+            if not self.player.alive():
+                print("you died")
+                running = False
+
+            # Draw background
             self.screen.fill("black")
             self.screen.blit(self.background, self.screen_pos)
 
-            pygame.draw.circle(self.screen, "red", self.player_pos, 40)
+            # Draw sprites
+            self.player_group.draw(surface=self.screen)
+            self.weapons_group.draw(surface=self.screen)
+            self.enemies_group.draw(surface=self.screen)
 
             # flip() the display to put your work on screen
             pygame.display.flip()
@@ -98,10 +155,13 @@ class Game:
         sprint = modifiers & pygame.KMOD_SHIFT
         return keys, sprint
 
-    def move_player_or_background(self, keys: Tuple[bool], sprint: bool) -> None:
+    def move_background(self, keys: Tuple[bool], sprint: bool) -> None:
         """
         Move the background or the player relative to the background
         """
+        # Save position before move
+        previous_pos = self.screen_pos.copy()
+
         # Determine how far to move
         scroll_dist = SCROLL_DIST * 5 if sprint else SCROLL_DIST
 
@@ -116,32 +176,8 @@ class Game:
         if keys[pygame.K_d]:
             scroll_vector.x = -scroll_dist * self.dt
 
-        # # Decide whether to move the background or the player
-        # if player_pos != center_screen or not self.can_move_background(scroll_vector):
-        #     self.move_player(scroll_vector)
-        # else:
-        #     self.move_background(scroll_vector)
-
-        self.move_background(scroll_vector)
-
-    # def move_player(self, scroll_vector: pygame.Vector2) -> None:
-    #     """
-    #     Move player relative to background
-    #     """
-    #     self.player_pos -= scroll_vector
-
-    #     # Clamp player to center of screen if nearby
-    #     if (
-    #         self.player_pos - self.center_screen
-    #     ).magnitude() < scroll_vector.magnitude():
-    #         self.player_pos = self.center_screen
-
-    def move_background(self, scroll_vector: pygame.Vector2) -> None:
-        """
-        Move background
-        """
         # Get position player wants to move to
-        new_pos = self.screen_pos.copy() + scroll_vector
+        new_pos = self.screen_pos + scroll_vector
 
         # Check for walls
         if self.can_move_to(new_pos):
@@ -161,6 +197,9 @@ class Game:
             SCREEN_POS_Y_UB + self.center_screen.y,
         )
 
+        # Return true scroll delta
+        return self.screen_pos - previous_pos
+
     def can_move_to(self, new_position: pygame.Vector2) -> bool:
         """
         Check if the player can move to a desired position
@@ -168,13 +207,19 @@ class Game:
         unscaled_x, unscaled_y = self.pygame_pos_to_numpy(pos=new_position)
         return self.walls[int(unscaled_y), int(unscaled_x)] == 255
 
-    def best_effort_move(self, scroll_vector: pygame.Vector2) -> pygame.Vector2:
+    def best_effort_move(
+        self, scroll_vector: pygame.Vector2, scroll_scale: float = 4.0
+    ) -> pygame.Vector2:
         """
         Move background as far as possible in desired direction
+
+        Args:
+            scroll_vector: Desired direction of movement
+            scroll_scale: Multiplier for scroll_vector - required to function correctly
         """
         # breakpoint()
         numpy_pos = self.pygame_pos_to_numpy(pos=self.screen_pos)
-        move_distance = scroll_vector.magnitude() / BG_SCALE_FACTOR
+        move_distance = scroll_vector.magnitude() * scroll_scale / BG_SCALE_FACTOR
         region_offset = pygame.Vector2(move_distance, move_distance)
         region_lb = numpy_pos - region_offset
         region_ub = numpy_pos + region_offset

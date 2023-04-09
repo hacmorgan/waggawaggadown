@@ -4,46 +4,79 @@ Wagga Wagga Down character classes
 
 
 from enum import Enum
-from typing import Dict
+from typing import Dict, Iterator, List
 
 import pygame
 
 
-class SpriteFrame(Enum):
+# Scaling factors for sprites
+PLAYER_SCALE_FACTOR = 2.5
+ENEMY_SCALE_FACTOR = 1.0
+
+# Damage done to player by enemy contact
+ENEMY_COLLISION_DAMAGE = 1
+WEAPON_COLLISION_DAMAGE = 50
+
+
+CollisionsDict = Dict[pygame.sprite.Sprite, List[pygame.sprite.Sprite]]
+
+
+class AnimationFrame(Enum):
     """
-    Defined frames of animation
+    Walk animation frames
     """
 
-    FORWARD = "FORWARD"
-    FORWARD_LEFT_STEP = "FORWARD_LEFT_STEP"
-    FORWARD_RIGHT_STEP = "FORWARD_RIGHT_STEP"
-    LEFT = "LEFT"
-    LEFT_LEFT_STEP = "LEFT_LEFT_STEP"
-    LEFT_RIGHT_STEP = "LEFT_RIGHT_STEP"
-    RIGHT = "RIGHT"
-    RIGHT_LEFT_STEP = "RIGHT_LEFT_STEP"
-    RIGHT_RIGHT_STEP = "RIGHT_RIGHT_STEP"
-    BACK = "BACK"
-    BACK_LEFT_STEP = "BACK_LEFT_STEP"
-    BACK_RIGHT_STEP = "BACK_RIGHT_STEP"
+    REGULAR = "FORWARD"
+    LEFT_STEP = "LEFT_STEP"
+    RIGHT_STEP = "RIGHT_STEP"
 
 
-class Character:
+class Character(pygame.sprite.Sprite):
     """
     Base class for all characters
     """
 
-    def __init__(self, sprites: Dict[SpriteFrame, pygame.Surface], max_health: float):
+    def __init__(
+        self,
+        pos: pygame.Vector2,
+        sprites: Dict[AnimationFrame, pygame.Surface],
+        max_health: float,
+    ):
         """
         Construct the character object
         """
-        self.sprites = sprites
+        super().__init__()
+        self.image = sprites[AnimationFrame.REGULAR]
+        self.pos = pos
+        self.rect = self.image.get_rect()
+        self.rect.center = self.pos
         self.health = max_health
 
-    def draw(self) -> None:
+    def animation_frames(self) -> Iterator[pygame.Surface]:
         """
-        Draw the character and recursively draw any extras (e.g. weapons, pets)
+        Yield
         """
+        # Only do walk animations if all required frames are present
+        if all(frame in self.sprites for frame in AnimationFrame):
+            frames = (
+                AnimationFrame.REGULAR,
+                AnimationFrame.LEFT_STEP,
+                AnimationFrame.REGULAR,
+                AnimationFrame.RIGHT_STEP,
+            )
+        else:
+            frames = (AnimationFrame.REGULAR,)
+
+        # Infinitely yield frames
+        while True:
+            yield from frames
+
+    def update(self) -> None:
+        """
+        Update charcter state
+        """
+        if self.health < 0:
+            self.kill()
 
 
 class Player(Character):
@@ -51,14 +84,99 @@ class Player(Character):
     Class for player character
     """
 
+    def __init__(self, pos: pygame.Vector2):
+        """
+        Construct the player
+        """
+        fwd_image = pygame.transform.smoothscale_by(
+            pygame.image.load(
+                "../assets/sprites/player/forward/regular.png"
+            ).convert_alpha(),
+            PLAYER_SCALE_FACTOR,
+        )
+        super().__init__(
+            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=100
+        )
+        self.meelee_weapon = None
+
+    def update(
+        self,
+        scroll_delta: pygame.Vector2,
+        player_enemy_collisions: CollisionsDict,
+    ) -> None:
+        """
+        Update player
+        """
+        if self in player_enemy_collisions:
+            for _ in player_enemy_collisions[self]:
+                self.health -= ENEMY_COLLISION_DAMAGE
+
+        super().update()
+
 
 class Enemy(Character):
     """
     Class for enemy NPCs
     """
 
+    def __init__(self, pos: pygame.Vector2):
+        """
+        Construct the player
+        """
+        fwd_image = pygame.transform.smoothscale_by(
+            pygame.image.load(
+                "../assets/sprites/enemy/zombie/regular.png"
+            ).convert_alpha(),
+            ENEMY_SCALE_FACTOR,
+        )
+        super().__init__(
+            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=50
+        )
+        self.meelee_weapon = None
+
+    def update(
+        self,
+        scroll_delta: pygame.Vector2,
+        enemy_weapon_collisions: CollisionsDict,
+    ) -> None:
+        """
+        Update enemy state
+        """
+        if self in enemy_weapon_collisions:
+            for _ in enemy_weapon_collisions[self]:
+                self.health -= WEAPON_COLLISION_DAMAGE
+
+        self.pos += scroll_delta
+        self.rect.center = self.pos
+        super().update()
+
 
 class Pet(Character):
     """
     Class for friendly pets
     """
+
+    def __init__(self, pos: pygame.Vector2):
+        """
+        Construct the player
+        """
+        fwd_image = pygame.transform.smoothscale_by(
+            pygame.image.load(
+                "../assets/sprites/player/forward/regular.png"
+            ).convert_alpha(),
+            PLAYER_SCALE_FACTOR,
+        )
+        super().__init__(
+            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=100
+        )
+        self.meelee_weapon = None
+
+    def update(
+        self,
+        scroll_delta: pygame.Vector2,
+        player_enemy_collisions: CollisionsDict,
+    ) -> None:
+        """
+        Update player
+        """
+        super().update()
