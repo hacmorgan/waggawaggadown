@@ -19,7 +19,7 @@ setup(
     package_data={},
     install_requires=[
         "numpy",
-        "PIL",
+        "Pillow",
         "pygame",
     ],
     scripts=[],
