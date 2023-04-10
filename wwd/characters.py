@@ -4,21 +4,24 @@ Wagga Wagga Down character classes
 
 
 from enum import Enum
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, Tuple
 
 import pygame
+
+from wwd.constants import CollisionsDict
+from wwd.weapons import MeeleeWeapon, RangedWeapon
 
 
 # Scaling factors for sprites
 PLAYER_SCALE_FACTOR = 2.5
 ENEMY_SCALE_FACTOR = 1.0
 
+ENEMY_FOLLOW_DIST = 500
+ENEMY_MOVE_SPEED = 100
+
 # Damage done to player by enemy contact
 ENEMY_COLLISION_DAMAGE = 1
 WEAPON_COLLISION_DAMAGE = 50
-
-
-CollisionsDict = Dict[pygame.sprite.Sprite, List[pygame.sprite.Sprite]]
 
 
 class AnimationFrame(Enum):
@@ -39,6 +42,9 @@ class MouseButton(Enum):
     LEFT = 0
     RIGHT = 1
     MIDDLE = 2
+
+
+MOUSE_BUTTONS = {"LEFT": idx for idx, mouse_button in enumerate(MouseButton)}
 
 
 class Character(pygame.sprite.Sprite):
@@ -94,7 +100,12 @@ class Player(Character):
     Class for player character
     """
 
-    def __init__(self, pos: pygame.Vector2):
+    def __init__(
+        self,
+        pos: pygame.Vector2,
+        meelee_weapon: MeeleeWeapon,
+        # ranged_weapon: RangedWeapon,
+    ):
         """
         Construct the player
         """
@@ -107,8 +118,8 @@ class Player(Character):
         super().__init__(
             pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=100
         )
-        self.meelee_weapon = None
-        self.ranged_weapon = None
+        self.meelee_weapon = meelee_weapon
+        # self.ranged_weapon = ranged_weapon
         self.active_weapon = self.meelee_weapon
 
     def update(
@@ -127,9 +138,12 @@ class Player(Character):
                 self.health -= ENEMY_COLLISION_DAMAGE
 
         # Check weapons & keypresses
-        if scroll_wheel:
-            self.switch_weapon()
-        if self.active_weapon.can_attack and mouse_buttons[MouseButton.LEFT]:
+        # if scroll_wheel:
+        #     self.switch_weapon()
+        if (
+            not self.active_weapon.is_attacking
+            and mouse_buttons[MouseButton.LEFT.value]
+        ):
             self.active_weapon.attack()
 
         # Perform generic character update
@@ -139,7 +153,10 @@ class Player(Character):
         """
         Alternate between meelee and ranged weapon
         """
-        if self.ac
+        if self.active_weapon is self.meelee_weapon:
+            self.active_weapon = self.ranged_weapon
+        else:
+            self.active_weapon = self.meelee_weapon
 
 
 class Enemy(Character):
@@ -147,7 +164,7 @@ class Enemy(Character):
     Class for enemy NPCs
     """
 
-    def __init__(self, pos: pygame.Vector2):
+    def __init__(self, pos: pygame.Vector2, player: Player):
         """
         Construct the player
         """
@@ -160,22 +177,20 @@ class Enemy(Character):
         super().__init__(
             pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=50
         )
-        self.meelee_weapon = None
+        self.player = player
 
     def update(
         self,
         scroll_delta: pygame.Vector2,
-        enemy_weapon_collisions: CollisionsDict,
+        dt: float,
     ) -> None:
         """
         Update enemy state
         """
-        if self in enemy_weapon_collisions:
-            for _ in enemy_weapon_collisions[self]:
-                self.health -= WEAPON_COLLISION_DAMAGE
-
         self.pos += scroll_delta
         self.rect.center = self.pos
+        if self.pos.distance_to(self.player.pos) < ENEMY_FOLLOW_DIST:
+            self.pos = self.pos.move_towards(self.player.pos, ENEMY_MOVE_SPEED * dt)
         super().update()
 
 

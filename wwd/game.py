@@ -6,6 +6,8 @@ Main game logic
 """
 
 
+from functools import partial
+from random import random
 from typing import Tuple
 
 import numpy as np
@@ -21,7 +23,7 @@ SCROLL_DIST = 100
 HOME_X, HOME_Y = -616.5, -7179.2
 SCREEN_POS_X_LB, SCREEN_POS_X_UB = -8320, 0
 SCREEN_POS_Y_LB, SCREEN_POS_Y_UB = -7260, 0
-SCREEN_SCROLL_OFFSET = pygame.Vector2(640, 360)
+MOVEMENT_ENEMY_SPAWN_PROBABILITY = 0.05
 
 
 class Game:
@@ -41,7 +43,7 @@ class Game:
 
         # Load assets
         self.background = pygame.transform.smoothscale_by(
-            pygame.image.load("../assets/combined_bg.png").convert(), BG_SCALE_FACTOR
+            pygame.image.load("../assets/combined_bg.jpg").convert(), BG_SCALE_FACTOR
         )
         self.walls = np.array(PIL.Image.open("../assets/walls.png"))[
             :, :, -1  # Mask is alpha channel
@@ -55,14 +57,20 @@ class Game:
         self.screen_pos = pygame.Vector2(HOME_X, HOME_Y)
 
         # Initialise characters and groups
-        self.player = Player(pos=self.center_screen)
-        self.player_group = pygame.sprite.Group(self.player)
-        self.machete = MeeleeWeapon(
-            pos=self.player.pos + pygame.Vector2(self.player.rect.width / 2, 0)
+        self.weapons_group = pygame.sprite.Group()
+        self.player = Player(
+            pos=self.center_screen,
+            meelee_weapon=MeeleeWeapon(
+                pos=self.center_screen.copy(),
+                weapons_group=self.weapons_group,
+                player_center=self.center_screen,
+            ),
         )
-        self.weapons_group = pygame.sprite.Group(self.machete)
-        self.test_enemies = (Enemy(pos=self.center_screen / 2),)
-        self.enemies_group = pygame.sprite.Group(*self.test_enemies)
+        self.player_group = pygame.sprite.Group(self.player)
+        self.enemy_factory = partial(Enemy, player=self.player)
+        self.enemies_group = pygame.sprite.Group(
+            self.enemy_factory(pos=self.center_screen / 2)
+        )
 
     def main_loop(self) -> None:
         """
@@ -86,12 +94,6 @@ class Game:
                 dokilla=False,
                 dokillb=False,
             )
-            enemy_weapon_collisions = pygame.sprite.groupcollide(
-                groupa=self.enemies_group,
-                groupb=self.weapons_group,
-                dokilla=False,
-                dokillb=False,
-            )
             weapon_enemy_collisions = pygame.sprite.groupcollide(
                 groupa=self.weapons_group,
                 groupb=self.enemies_group,
@@ -105,6 +107,10 @@ class Game:
             # Determine player/background movements
             scroll_delta = self.move_background(keys=keys, sprint=sprint)
 
+            # Spawn new enemies on movement
+            if scroll_delta:
+                self.spawn_enemies(scroll_delta)
+
             # Update logic
             self.player_group.update(
                 scroll_delta=scroll_delta,
@@ -114,12 +120,13 @@ class Game:
             )
             self.weapons_group.update(
                 scroll_delta=scroll_delta,
+                dt=self.dt,
                 weapon_enemy_collisions=weapon_enemy_collisions,
             )
             self.enemies_group.update(
                 scroll_delta=scroll_delta,
-                enemy_weapon_collisions=enemy_weapon_collisions,
-            )  # n.b. enemies must update after weapons
+                dt=self.dt,
+            )
 
             # End game if player is dead
             if not self.player.alive():
@@ -137,8 +144,6 @@ class Game:
 
             # flip() the display to put your work on screen
             pygame.display.flip()
-
-            print(f"{self.screen_pos=}")
 
             # limits FPS to 60
             # dt is delta time in seconds since last frame, used for framerate-
@@ -163,7 +168,9 @@ class Game:
 
     def move_background(self, keys: Tuple[bool], sprint: bool) -> None:
         """
-        Move the background or the player relative to the background
+        Move the background
+
+        The player stays centred, so this is equivalent to moving the player
         """
         # Save position before move
         previous_pos = self.screen_pos.copy()
@@ -205,6 +212,24 @@ class Game:
 
         # Return true scroll delta
         return self.screen_pos - previous_pos
+
+    def spawn_enemies(self, scroll_delta: pygame.Vector2) -> None:
+        """
+        Randomly spawn an enemy
+        """
+        if random() < MOVEMENT_ENEMY_SPAWN_PROBABILITY:
+            spawn_point = pygame.Vector2()
+            if scroll_delta.x:
+                spawn_point.x = 0 if scroll_delta.x > 0 else self.screen.get_width() - 1
+            else:
+                spawn_point.x = random() * self.screen.get_width()
+            if scroll_delta.y:
+                spawn_point.y = (
+                    0 if scroll_delta.y > 0 else self.screen.get_height() - 1
+                )
+            else:
+                spawn_point.y = random() * self.screen.get_height()
+            self.enemies_group.add(self.enemy_factory(pos=spawn_point))
 
     def can_move_to(self, new_position: pygame.Vector2) -> bool:
         """
