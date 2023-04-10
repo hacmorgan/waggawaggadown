@@ -4,6 +4,7 @@ Wagga Wagga Down character classes
 
 
 from enum import Enum
+from pathlib import Path
 from typing import Dict, Iterator, Tuple
 
 import pygame
@@ -111,7 +112,7 @@ class Player(Character):
         """
         fwd_image = pygame.transform.smoothscale_by(
             pygame.image.load(
-                "../assets/sprites/player/forward/regular.png"
+                Path("../assets/sprites/player/forward/regular.png")
             ).convert_alpha(),
             PLAYER_SCALE_FACTOR,
         )
@@ -170,7 +171,7 @@ class Enemy(Character):
         """
         fwd_image = pygame.transform.smoothscale_by(
             pygame.image.load(
-                "../assets/sprites/enemy/zombie/regular.png"
+                Path("../assets/sprites/enemy/zombie/regular.png")
             ).convert_alpha(),
             ENEMY_SCALE_FACTOR,
         )
@@ -205,7 +206,7 @@ class Pet(Character):
         """
         fwd_image = pygame.transform.smoothscale_by(
             pygame.image.load(
-                "../assets/sprites/player/forward/regular.png"
+                Path("../assets/sprites/player/forward/regular.png")
             ).convert_alpha(),
             PLAYER_SCALE_FACTOR,
         )

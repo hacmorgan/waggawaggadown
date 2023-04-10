@@ -7,6 +7,7 @@ Main game logic
 
 
 from functools import partial
+from pathlib import Path
 from random import random
 from typing import Tuple
 
@@ -43,9 +44,10 @@ class Game:
 
         # Load assets
         self.background = pygame.transform.smoothscale_by(
-            pygame.image.load("../assets/combined_bg.jpg").convert(), BG_SCALE_FACTOR
+            pygame.image.load(Path("../assets/combined_bg.jpg")).convert(),
+            BG_SCALE_FACTOR,
         )
-        self.walls = np.array(PIL.Image.open("../assets/walls.png"))[
+        self.walls = np.array(PIL.Image.open(Path("../assets/walls.png")))[
             :, :, -1  # Mask is alpha channel
         ]
 

@@ -5,6 +5,7 @@ Wagga Wagga Down character classes
 
 from enum import Enum
 from math import sin, cos, radians
+from pathlib import Path
 from typing import Dict
 
 import pygame
@@ -104,7 +105,9 @@ class MeeleeWeapon(Weapon):
             single_use: Weapon dies after making contact if True
         """
         img = pygame.transform.smoothscale_by(
-            pygame.image.load("../assets/sprites/weapons/machete.png").convert_alpha(),
+            pygame.image.load(
+                Path("../assets/sprites/weapons/machete.png")
+            ).convert_alpha(),
             MEELEE_SCALE_FACTOR,
         )
         super().__init__(
@@ -178,7 +181,9 @@ class RangedWeapon(Weapon):
             single_use: Weapon dies after making contact if True
         """
         img = pygame.transform.smoothscale_by(
-            pygame.image.load("../assets/sprites/weapons/arrow.png").convert_alpha(),
+            pygame.image.load(
+                Path("../assets/sprites/weapons/arrow.png")
+            ).convert_alpha(),
             RANGED_SCALE_FACTOR,
         )
         super().__init__(
