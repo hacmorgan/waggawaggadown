@@ -135,7 +135,6 @@ class MeeleeWeapon(Weapon):
 
         # Update animation if currently attacking
         if self.is_attacking:
-
             # Check if we have completed a full revolution
             self.angle += MACHETE_ANGULAR_VELOCITY * dt
             if self.angle > 360:
@@ -211,7 +210,6 @@ class RangedWeapon(Weapon):
 
         # Update animation if currently attacking
         if self.is_attacking:
-
             # Check if we have completed a full revolution
             self.pos += self.direction * MACHETE_ANGULAR_VELOCITY * dt
             if self.angle > 360:
