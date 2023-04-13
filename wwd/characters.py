@@ -17,8 +17,14 @@ from wwd.weapons import MeeleeWeapon, RangedWeapon
 PLAYER_SCALE_FACTOR = 2.5
 ENEMY_SCALE_FACTOR = 1.0
 
-ENEMY_FOLLOW_DIST = 500
+ENEMY_FOLLOW_DIST = 800
 ENEMY_MOVE_SPEED = 100
+
+# Enemy starting health
+ENEMY_HEALTH=49
+
+# Rate of player health regeneration
+HEALTH_REGEN_RATE = 5
 
 # Damage done to player by enemy contact
 ENEMY_COLLISION_DAMAGE = 1
@@ -58,6 +64,7 @@ class Character(pygame.sprite.Sprite):
         pos: pygame.Vector2,
         sprites: Dict[AnimationFrame, pygame.Surface],
         max_health: float,
+        screen: pygame.Surface,
     ):
         """
         Construct the character object
@@ -67,7 +74,9 @@ class Character(pygame.sprite.Sprite):
         self.pos = pos
         self.rect = self.image.get_rect()
         self.rect.center = self.pos
-        self.health = max_health
+        self.max_health = max_health
+        self.health = self.max_health
+        self.screen = screen
 
     def animation_frames(self) -> Iterator[pygame.Surface]:
         """
@@ -94,6 +103,15 @@ class Character(pygame.sprite.Sprite):
         """
         if self.health < 0:
             self.kill()
+        
+        # Draw health bar
+        health_bar_left = self.pos.copy() - pygame.Vector2(self.rect.width / 2, 10 + self.rect.height / 2)
+        health_bar_inflection_point = health_bar_left.copy()
+        health_bar_inflection_point.x = health_bar_left.x + self.health / self.max_health * self.rect.width
+        health_bar_right = health_bar_left.copy()
+        health_bar_right.x = health_bar_left.x + self.rect.width
+        pygame.draw.line(self.screen, "green", health_bar_left, health_bar_inflection_point, width=2)
+        pygame.draw.line(self.screen, "red", health_bar_inflection_point, health_bar_right, width=2)
 
 
 class Player(Character):
@@ -106,6 +124,7 @@ class Player(Character):
         pos: pygame.Vector2,
         meelee_weapon: MeeleeWeapon,
         # ranged_weapon: RangedWeapon,
+        screen: pygame.Surface,
     ):
         """
         Construct the player
@@ -117,7 +136,7 @@ class Player(Character):
             PLAYER_SCALE_FACTOR,
         )
         super().__init__(
-            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=100
+            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=100, screen=screen
         )
         self.meelee_weapon = meelee_weapon
         # self.ranged_weapon = ranged_weapon
@@ -126,6 +145,7 @@ class Player(Character):
     def update(
         self,
         scroll_delta: pygame.Vector2,
+        dt: float,
         player_enemy_collisions: CollisionsDict,
         mouse_buttons: Tuple[bool],
         scroll_wheel: bool,
@@ -147,6 +167,10 @@ class Player(Character):
         ):
             self.active_weapon.attack()
 
+        # Regenerate health
+        if self.health < self.max_health:
+            self.health = min(self.max_health, self.health + HEALTH_REGEN_RATE * dt)
+
         # Perform generic character update
         super().update()
 
@@ -165,7 +189,9 @@ class Enemy(Character):
     Class for enemy NPCs
     """
 
-    def __init__(self, pos: pygame.Vector2, player: Player):
+    def __init__(self, pos: pygame.Vector2, player: Player,
+        screen: pygame.Surface,
+                 ):
         """
         Construct the player
         """
@@ -176,7 +202,7 @@ class Enemy(Character):
             ENEMY_SCALE_FACTOR,
         )
         super().__init__(
-            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=50
+            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=ENEMY_HEALTH, screen=screen
         )
         self.player = player
 

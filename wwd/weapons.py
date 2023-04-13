@@ -4,7 +4,7 @@ Wagga Wagga Down character classes
 
 
 from enum import Enum
-from math import sin, cos, radians
+from math import exp, sin, cos, radians
 from pathlib import Path
 from typing import Dict
 
@@ -16,8 +16,8 @@ from wwd.constants import CollisionsDict
 RANGED_SCALE_FACTOR = 1.0
 MEELEE_SCALE_FACTOR = 1.5
 
-MACHETE_DAMAGE = 50
-MACHETE_ANGULAR_VELOCITY = 800
+MACHETE_DAMAGE = 100
+MACHETE_ANGULAR_VELOCITY = 700
 ARROW_DAMAGE = 50
 
 
@@ -73,7 +73,7 @@ class Weapon(pygame.sprite.Sprite):
         # Check collisions with enemies
         if self in weapon_enemy_collisions and self.is_attacking:
             for enemy in weapon_enemy_collisions[self]:
-                enemy.health -= self.damage
+                enemy.health -= self.damage * exp(-(enemy.pos - self.pos).magnitude() * 0.01)
                 if self.single_use:
                     self.kill_next_time = True
                     return

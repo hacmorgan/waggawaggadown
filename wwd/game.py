@@ -20,11 +20,12 @@ from wwd.weapons import MeeleeWeapon, RangedWeapon
 
 
 BG_SCALE_FACTOR = 1.5
-SCROLL_DIST = 100
+SCROLL_DIST = 150
 HOME_X, HOME_Y = -616.5, -7179.2
 SCREEN_POS_X_LB, SCREEN_POS_X_UB = -8320, 0
 SCREEN_POS_Y_LB, SCREEN_POS_Y_UB = -7260, 0
 MOVEMENT_ENEMY_SPAWN_PROBABILITY = 0.05
+SPRINT_SPEED_MULTIPLIER = 2.5
 
 
 class Game:
@@ -38,7 +39,7 @@ class Game:
         """
         # Initialise game
         pygame.init()
-        self.screen = pygame.display.set_mode((1280, 720))
+        self.screen = pygame.display.set_mode((1920, 1080))
         # TODO: loading screen
         self.clock = pygame.time.Clock()
 
@@ -67,9 +68,10 @@ class Game:
                 weapons_group=self.weapons_group,
                 player_center=self.center_screen,
             ),
+            screen=self.screen,
         )
         self.player_group = pygame.sprite.Group(self.player)
-        self.enemy_factory = partial(Enemy, player=self.player)
+        self.enemy_factory = partial(Enemy, player=self.player, screen=self.screen)
         self.enemies_group = pygame.sprite.Group(
             self.enemy_factory(pos=self.center_screen / 2)
         )
@@ -113,9 +115,14 @@ class Game:
             if scroll_delta:
                 self.spawn_enemies(scroll_delta)
 
+            # Draw background
+            self.screen.fill("black")
+            self.screen.blit(self.background, self.screen_pos)
+
             # Update logic
             self.player_group.update(
                 scroll_delta=scroll_delta,
+                dt=self.dt,
                 player_enemy_collisions=player_enemy_collisions,
                 mouse_buttons=mouse_buttons,
                 scroll_wheel=scroll_wheel,
@@ -134,10 +141,6 @@ class Game:
             if not self.player.alive():
                 print("you died")
                 running = False
-
-            # Draw background
-            self.screen.fill("black")
-            self.screen.blit(self.background, self.screen_pos)
 
             # Draw sprites
             self.player_group.draw(surface=self.screen)
@@ -165,7 +168,8 @@ class Game:
         keys = pygame.key.get_pressed()
         modifiers = pygame.key.get_mods()
         mouse_buttons = pygame.mouse.get_pressed()
-        sprint = modifiers & pygame.KMOD_SHIFT
+        # sprint = modifiers & pygame.KMOD_SHIFT
+        sprint = modifiers & pygame.KMOD_CAPS
         return keys, mouse_buttons, sprint
 
     def move_background(self, keys: Tuple[bool], sprint: bool) -> None:
@@ -178,7 +182,7 @@ class Game:
         previous_pos = self.screen_pos.copy()
 
         # Determine how far to move
-        scroll_dist = SCROLL_DIST * 5 if sprint else SCROLL_DIST
+        scroll_dist = SCROLL_DIST * SPRINT_SPEED_MULTIPLIER if sprint else SCROLL_DIST
 
         # Determine movement direction
         scroll_vector = pygame.Vector2(0, 0)
