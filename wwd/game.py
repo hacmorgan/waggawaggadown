@@ -21,11 +21,10 @@ from wwd.weapons import MeeleeWeapon, RangedWeapon
 
 BG_SCALE_FACTOR = 1.5
 SCROLL_DIST = 150
-HOME_X, HOME_Y = -616.5, -7179.2
-SCREEN_POS_X_LB, SCREEN_POS_X_UB = -8320, 0
-SCREEN_POS_Y_LB, SCREEN_POS_Y_UB = -7260, 0
+HOME_X, HOME_Y = 845, 5030
 MOVEMENT_ENEMY_SPAWN_PROBABILITY = 0.05
 SPRINT_SPEED_MULTIPLIER = 2.5
+ENEMY_FOLLOW_DIST_MULTIPLIER = 0.5
 
 
 class Game:
@@ -39,7 +38,9 @@ class Game:
         """
         # Initialise game
         pygame.init()
-        self.screen = pygame.display.set_mode((1920, 1080))
+        self.resolution = pygame.Vector2(1920, 1080)
+        self.resolution = pygame.Vector2(1200, 800)
+        self.screen = pygame.display.set_mode(self.resolution)
         # TODO: loading screen
         self.clock = pygame.time.Clock()
 
@@ -57,7 +58,11 @@ class Game:
         self.center_screen = pygame.Vector2(
             self.screen.get_width() / 2, self.screen.get_height() / 2
         )
-        self.screen_pos = pygame.Vector2(HOME_X, HOME_Y)
+        self.screen_pos = self.numpy_pos_to_pygame(pygame.Vector2(HOME_X, HOME_Y))
+        self.numpy_pos_ub = pygame.Vector2(
+            self.background.get_width() / BG_SCALE_FACTOR - 1,
+            self.background.get_height() / BG_SCALE_FACTOR - 1,
+        )
 
         # Initialise characters and groups
         self.weapons_group = pygame.sprite.Group()
@@ -68,10 +73,21 @@ class Game:
                 weapons_group=self.weapons_group,
                 player_center=self.center_screen,
             ),
+            ranged_weapon=RangedWeapon(
+                pos=self.center_screen.copy(),
+                weapons_group=self.weapons_group,
+                player_center=self.center_screen,
+                screen=self.screen,
+            ),
             screen=self.screen,
         )
         self.player_group = pygame.sprite.Group(self.player)
-        self.enemy_factory = partial(Enemy, player=self.player, screen=self.screen)
+        self.enemy_factory = partial(
+            Enemy,
+            player=self.player,
+            screen=self.screen,
+            enemy_follow_distance=min(self.resolution) * ENEMY_FOLLOW_DIST_MULTIPLIER,
+        )
         self.enemies_group = pygame.sprite.Group(
             self.enemy_factory(pos=self.center_screen / 2)
         )
@@ -126,6 +142,7 @@ class Game:
                 player_enemy_collisions=player_enemy_collisions,
                 mouse_buttons=mouse_buttons,
                 scroll_wheel=scroll_wheel,
+                keys=keys,
             )
             self.weapons_group.update(
                 scroll_delta=scroll_delta,
@@ -156,6 +173,12 @@ class Game:
             self.dt = self.clock.tick(60) / 1000
 
         pygame.quit()
+
+    def player_pos(self) -> pygame.Vector2:
+        """
+        Return player position on the board
+        """
+        return self.pygame_pos_to_numpy(pos=self.screen_pos)
 
     def get_input(self) -> Tuple[Tuple[bool], Tuple[bool], bool]:
         """
@@ -197,23 +220,30 @@ class Game:
 
         # Get position player wants to move to
         new_pos = self.screen_pos + scroll_vector
-
-        # Check for walls
-        if self.can_move_to(new_pos):
-            self.screen_pos = new_pos
-        else:
-            self.screen_pos = self.best_effort_move(scroll_vector)
+        new_numpy_pos = self.pygame_pos_to_numpy(new_pos)
 
         # Clamp coordinates within borders
-        self.screen_pos.x = pygame.math.clamp(
-            self.screen_pos.x,
-            SCREEN_POS_X_LB - self.center_screen.x,
-            SCREEN_POS_X_UB + self.center_screen.x,
+        new_numpy_pos.x = pygame.math.clamp(
+            new_numpy_pos.x,
+            0,
+            self.numpy_pos_ub.x,
         )
-        self.screen_pos.y = pygame.math.clamp(
-            self.screen_pos.y,
-            SCREEN_POS_Y_LB - self.center_screen.y,
-            SCREEN_POS_Y_UB + self.center_screen.y,
+        new_numpy_pos.y = pygame.math.clamp(
+            new_numpy_pos.y,
+            0,
+            self.numpy_pos_ub.y,
+        )
+
+        # Check for walls
+        if not self.can_move_to(new_numpy_pos):
+            best_effort_numpy_pos = self.best_effort_move(
+                scroll_vector=scroll_vector, new_numpy_pos=new_numpy_pos
+            )
+            if best_effort_numpy_pos is not None:
+                new_numpy_pos = best_effort_numpy_pos
+
+        self.screen_pos = self.screen_pos.move_towards(
+            self.numpy_pos_to_pygame(new_numpy_pos), scroll_vector.magnitude()
         )
 
         # Return true scroll delta
@@ -237,15 +267,18 @@ class Game:
                 spawn_point.y = random() * self.screen.get_height()
             self.enemies_group.add(self.enemy_factory(pos=spawn_point))
 
-    def can_move_to(self, new_position: pygame.Vector2) -> bool:
+    def can_move_to(self, new_numpy_position: pygame.Vector2) -> bool:
         """
         Check if the player can move to a desired position
         """
-        unscaled_x, unscaled_y = self.pygame_pos_to_numpy(pos=new_position)
+        unscaled_x, unscaled_y = new_numpy_position
         return self.walls[int(unscaled_y), int(unscaled_x)] == 255
 
     def best_effort_move(
-        self, scroll_vector: pygame.Vector2, scroll_scale: float = 4.0
+        self,
+        scroll_vector: pygame.Vector2,
+        new_numpy_pos: pygame.Vector2,
+        scroll_scale: float = 4.0,
     ) -> pygame.Vector2:
         """
         Move background as far as possible in desired direction
@@ -254,44 +287,46 @@ class Game:
             scroll_vector: Desired direction of movement
             scroll_scale: Multiplier for scroll_vector - required to function correctly
         """
-        # breakpoint()
-        numpy_pos = self.pygame_pos_to_numpy(pos=self.screen_pos)
+        # Extract local region of background and walls
         move_distance = scroll_vector.magnitude() * scroll_scale / BG_SCALE_FACTOR
         region_offset = pygame.Vector2(move_distance, move_distance)
-        region_lb = numpy_pos - region_offset
-        region_ub = numpy_pos + region_offset
+        region_lb = new_numpy_pos - region_offset
+        region_ub = new_numpy_pos + region_offset
         region = self.walls[
             (lby := int(region_lb.y)) : (uby := int(region_ub.y)),
             (lbx := int(region_lb.x)) : (ubx := int(region_ub.x)),
         ]
+
+        # Construct boolean mask of spaces player can move to
         free_space = region == 255
 
-        # Construct array of positions that should correlate with free_space array mask
+        # Get co-ordinates of free spaces
         ys, xs = np.meshgrid(range(lby, uby), range(lbx, ubx))
         ys, xs = ys[free_space.T], xs[free_space.T]
 
+        # Sometimes there is no possible move
         if 0 in (len(xs), len(ys)):
-            return self.screen_pos
+            return None
 
+        # Determine optimal space to move to
         best_move = pygame.Vector2()
-        if scroll_vector.x == 0:
+        if scroll_vector.x == 0:  # Moving in Y only
             if scroll_vector.y > 0:
-                best_move_idx = np.argmax(ys)
-            else:
                 best_move_idx = np.argmin(ys)
-        elif scroll_vector.y == 0:
-            if scroll_vector.x > 0:
-                best_move_idx = np.argmax(xs)
             else:
+                best_move_idx = np.argmax(ys)
+        elif scroll_vector.y == 0:  # Moving in X only
+            if scroll_vector.x > 0:
                 best_move_idx = np.argmin(xs)
-        else:
+            else:
+                best_move_idx = np.argmax(xs)
+        else:  # Moving diagonally
             best_move_idx = np.argmax(
-                np.sqrt((xs - numpy_pos.x) ** 2 + (ys - numpy_pos.y) ** 2)
+                np.sqrt((xs - new_numpy_pos.x) ** 2 + (ys - new_numpy_pos.y) ** 2)
             )
-            return self.screen_pos
-        best_move.x, best_move.y = xs[best_move_idx], ys[best_move_idx]
 
-        return self.numpy_pos_to_pygame(best_move)
+        best_move.x, best_move.y = xs[best_move_idx], ys[best_move_idx]
+        return best_move
 
     def pygame_pos_to_numpy(self, pos: pygame.Vector2) -> pygame.Vector2:
         """

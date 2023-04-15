@@ -21,7 +21,7 @@ ENEMY_FOLLOW_DIST = 800
 ENEMY_MOVE_SPEED = 100
 
 # Enemy starting health
-ENEMY_HEALTH=49
+ENEMY_HEALTH = 49
 
 # Rate of player health regeneration
 HEALTH_REGEN_RATE = 5
@@ -103,15 +103,23 @@ class Character(pygame.sprite.Sprite):
         """
         if self.health < 0:
             self.kill()
-        
+
         # Draw health bar
-        health_bar_left = self.pos.copy() - pygame.Vector2(self.rect.width / 2, 10 + self.rect.height / 2)
+        health_bar_left = self.pos.copy() - pygame.Vector2(
+            self.rect.width / 2, 10 + self.rect.height / 2
+        )
         health_bar_inflection_point = health_bar_left.copy()
-        health_bar_inflection_point.x = health_bar_left.x + self.health / self.max_health * self.rect.width
+        health_bar_inflection_point.x = (
+            health_bar_left.x + self.health / self.max_health * self.rect.width
+        )
         health_bar_right = health_bar_left.copy()
         health_bar_right.x = health_bar_left.x + self.rect.width
-        pygame.draw.line(self.screen, "green", health_bar_left, health_bar_inflection_point, width=2)
-        pygame.draw.line(self.screen, "red", health_bar_inflection_point, health_bar_right, width=2)
+        pygame.draw.line(
+            self.screen, "green", health_bar_left, health_bar_inflection_point, width=2
+        )
+        pygame.draw.line(
+            self.screen, "red", health_bar_inflection_point, health_bar_right, width=2
+        )
 
 
 class Player(Character):
@@ -123,7 +131,7 @@ class Player(Character):
         self,
         pos: pygame.Vector2,
         meelee_weapon: MeeleeWeapon,
-        # ranged_weapon: RangedWeapon,
+        ranged_weapon: RangedWeapon,
         screen: pygame.Surface,
     ):
         """
@@ -136,10 +144,13 @@ class Player(Character):
             PLAYER_SCALE_FACTOR,
         )
         super().__init__(
-            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=100, screen=screen
+            pos=pos,
+            sprites={AnimationFrame.REGULAR: fwd_image},
+            max_health=100,
+            screen=screen,
         )
         self.meelee_weapon = meelee_weapon
-        # self.ranged_weapon = ranged_weapon
+        self.ranged_weapon = ranged_weapon
         self.active_weapon = self.meelee_weapon
 
     def update(
@@ -149,6 +160,7 @@ class Player(Character):
         player_enemy_collisions: CollisionsDict,
         mouse_buttons: Tuple[bool],
         scroll_wheel: bool,
+        keys: Tuple[bool],
     ) -> None:
         """
         Update player
@@ -159,8 +171,8 @@ class Player(Character):
                 self.health -= ENEMY_COLLISION_DAMAGE
 
         # Check weapons & keypresses
-        # if scroll_wheel:
-        #     self.switch_weapon()
+        if scroll_wheel or keys[pygame.K_SPACE]:
+            self.switch_weapon()
         if (
             not self.active_weapon.is_attacking
             and mouse_buttons[MouseButton.LEFT.value]
@@ -189,9 +201,13 @@ class Enemy(Character):
     Class for enemy NPCs
     """
 
-    def __init__(self, pos: pygame.Vector2, player: Player,
+    def __init__(
+        self,
+        pos: pygame.Vector2,
+        player: Player,
         screen: pygame.Surface,
-                 ):
+        enemy_follow_distance: float,
+    ):
         """
         Construct the player
         """
@@ -202,9 +218,13 @@ class Enemy(Character):
             ENEMY_SCALE_FACTOR,
         )
         super().__init__(
-            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=ENEMY_HEALTH, screen=screen
+            pos=pos,
+            sprites={AnimationFrame.REGULAR: fwd_image},
+            max_health=ENEMY_HEALTH,
+            screen=screen,
         )
         self.player = player
+        self.enemy_follow_distance = enemy_follow_distance
 
     def update(
         self,
@@ -216,7 +236,7 @@ class Enemy(Character):
         """
         self.pos += scroll_delta
         self.rect.center = self.pos
-        if self.pos.distance_to(self.player.pos) < ENEMY_FOLLOW_DIST:
+        if self.pos.distance_to(self.player.pos) < self.enemy_follow_distance:
             self.pos = self.pos.move_towards(self.player.pos, ENEMY_MOVE_SPEED * dt)
         super().update()
 

@@ -19,6 +19,8 @@ MEELEE_SCALE_FACTOR = 1.5
 MACHETE_DAMAGE = 100
 MACHETE_ANGULAR_VELOCITY = 700
 ARROW_DAMAGE = 50
+ARROW_SPEED = 400
+ARROW_DISTANCE = 1000
 
 
 class Weapon(pygame.sprite.Sprite):
@@ -73,7 +75,9 @@ class Weapon(pygame.sprite.Sprite):
         # Check collisions with enemies
         if self in weapon_enemy_collisions and self.is_attacking:
             for enemy in weapon_enemy_collisions[self]:
-                enemy.health -= self.damage * exp(-(enemy.pos - self.pos).magnitude() * 0.01)
+                enemy.health -= self.damage * exp(
+                    -(enemy.pos - self.pos).magnitude() * 0.01
+                )
                 if self.single_use:
                     self.kill_next_time = True
                     return
@@ -84,6 +88,13 @@ class Weapon(pygame.sprite.Sprite):
         """
         self.is_attacking = True
         self.add(self.weapons_group)
+
+    def kill(self) -> None:
+        """
+        Kill the weapon
+        """
+        self.is_attacking = False
+        super().kill()
 
 
 class MeeleeWeapon(Weapon):
@@ -138,7 +149,6 @@ class MeeleeWeapon(Weapon):
             # Check if we have completed a full revolution
             self.angle += MACHETE_ANGULAR_VELOCITY * dt
             if self.angle > 360:
-                self.is_attacking = False
                 self.kill()
             self.image = pygame.transform.rotate(self.original_image, self.angle)
 
@@ -171,6 +181,7 @@ class RangedWeapon(Weapon):
         pos: pygame.Vector2,
         weapons_group: pygame.sprite.Group,
         player_center: pygame.Vector2,
+        screen: pygame.Surface,
     ):
         """
         Construct the character object
@@ -186,7 +197,7 @@ class RangedWeapon(Weapon):
             RANGED_SCALE_FACTOR,
         )
         super().__init__(
-            pos=pos,
+            pos=pos + pygame.Vector2(0, 25),
             weapons_group=weapons_group,
             player_center=player_center,
             image=img,
@@ -194,6 +205,10 @@ class RangedWeapon(Weapon):
             single_use=True,
         )
         self.direction = None
+        self.original_image = img
+        self.image = self.original_image.copy()
+        self.screen = screen
+        self.range_ = pygame.Vector2(self.screen.get_size()).magnitude() / 2
 
     def update(
         self,
@@ -204,26 +219,42 @@ class RangedWeapon(Weapon):
         """
         Update enemy state
         """
-        self.pos += scroll_delta
-        self.rect.center = self.pos
+        # Base class update
         super().update(weapon_enemy_collisions=weapon_enemy_collisions)
+
+        # Draw aim line
+        pygame.draw.line(
+            self.screen, "black", self.player_center, pygame.mouse.get_pos()
+        )
 
         # Update animation if currently attacking
         if self.is_attacking:
-            # Check if we have completed a full revolution
-            self.pos += self.direction * MACHETE_ANGULAR_VELOCITY * dt
-            if self.angle > 360:
-                self.is_attacking = False
-                self.kill()
-            self.image = pygame.transform.rotate(self.original_image, self.angle)
 
-            # Compute new center
-            self.pos.x = (
-                self.player_center.x
-                - self.rect.width / 4
-                - self.swing_radius * sin(radians(self.angle))
-            )
-            self.pos.y = self.player_center.y - self.swing_radius * cos(
-                radians(self.angle)
-            )
+            # Account for background shifts
+            self.pos += scroll_delta
+            self.target += scroll_delta
+
+            # Move toward target
+            self.pos.move_towards_ip(self.target, ARROW_SPEED * dt)
+            if self.pos == self.target:
+                self.kill()
             self.rect.center = self.pos
+
+    def attack(self) -> None:
+        """
+        Execute weapon attack
+        """
+        super().attack()
+        self.pos = self.player_center.copy()
+        self.set_target()
+        self.angle = self.player_center.angle_to(self.target) * 2
+        self.image = pygame.transform.rotate(self.original_image, -self.angle - 125)
+
+    def set_target(self) -> None:
+        """
+        Set the arrow's target to the direction of the mouse, with the range of the bow
+        """
+        target = pygame.mouse.get_pos()
+        delta = target - self.player_center
+        delta *= self.range_ / delta.magnitude()
+        self.target = self.player_center + delta
