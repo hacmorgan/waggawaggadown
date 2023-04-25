@@ -1,4 +1,5 @@
 cd C:\Users\Emily\src\abyss\waggawaggadown\wwd
+git pull
 python3 -m pip install --upgrade ..
 clear
 python3 .\main.py
