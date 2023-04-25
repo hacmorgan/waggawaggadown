@@ -9,13 +9,13 @@ Main game logic
 from functools import partial
 from pathlib import Path
 from random import random
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 import PIL.Image
 import pygame
 
-from wwd.characters import Player, Enemy
+from wwd.characters import Player, Enemy, Pet
 from wwd.weapons import MeeleeWeapon, RangedWeapon
 
 
@@ -25,6 +25,7 @@ HOME_X, HOME_Y = 845, 5030
 MOVEMENT_ENEMY_SPAWN_PROBABILITY = 0.05
 SPRINT_SPEED_MULTIPLIER = 2.5
 ENEMY_FOLLOW_DIST_MULTIPLIER = 0.5
+PANKO_RESPAWN_TIME = 3.0
 
 
 class Game:
@@ -82,6 +83,15 @@ class Game:
             screen=self.screen,
         )
         self.player_group = pygame.sprite.Group(self.player)
+        self.panko_factory = partial(
+            Pet,
+            pos=self.center_screen + pygame.Vector2(self.player.rect.width, 0),
+            player=self.player,
+            screen=self.screen,
+        )
+        self.panko = self.panko_factory()
+        self.panko_respawn_timer = PANKO_RESPAWN_TIME
+        self.pet_group = pygame.sprite.Group(self.panko)
         self.enemy_factory = partial(
             Enemy,
             player=self.player,
@@ -120,6 +130,12 @@ class Game:
                 dokilla=False,
                 dokillb=False,
             )
+            pet_enemy_collisions = pygame.sprite.groupcollide(
+                groupa=self.pet_group,
+                groupb=self.enemies_group,
+                dokilla=False,
+                dokillb=False,
+            )
 
             # Get pressed keys
             keys, mouse_buttons, sprint = self.get_input()
@@ -130,6 +146,13 @@ class Game:
             # Spawn new enemies on movement
             if scroll_delta:
                 self.spawn_enemies(scroll_delta)
+
+            # Make Panko target the nearest enemy
+            if (
+                not self.panko.is_attacking
+                and (nearest_enemy := self.nearest_enemy()) is not None
+            ):
+                self.panko.attack(nearest_enemy)
 
             # Draw background
             self.screen.fill("black")
@@ -153,6 +176,20 @@ class Game:
                 scroll_delta=scroll_delta,
                 dt=self.dt,
             )
+            self.pet_group.update(
+                scroll_delta=scroll_delta,
+                dt=self.dt,
+                pet_enemy_collisions=pet_enemy_collisions,
+            )
+
+            # Pets respawning
+            if not self.panko.alive():
+                if self.panko_respawn_timer <= 0:
+                    self.panko_respawn_timer = PANKO_RESPAWN_TIME
+                    self.panko = self.panko_factory()
+                    self.pet_group = pygame.sprite.Group(self.panko)
+                else:
+                    self.panko_respawn_timer -= self.dt
 
             # End game if player is dead
             if not self.player.alive():
@@ -163,6 +200,7 @@ class Game:
             self.player_group.draw(surface=self.screen)
             self.weapons_group.draw(surface=self.screen)
             self.enemies_group.draw(surface=self.screen)
+            self.pet_group.draw(surface=self.screen)
 
             # flip() the display to put your work on screen
             pygame.display.flip()
@@ -266,6 +304,18 @@ class Game:
             else:
                 spawn_point.y = random() * self.screen.get_height()
             self.enemies_group.add(self.enemy_factory(pos=spawn_point))
+
+    def nearest_enemy(self) -> Optional[Enemy]:
+        """
+        Find the nearest enemy to the player
+        """
+        enemies = list(self.enemies_group)
+        if not enemies:
+            return None
+        return sorted(
+            enemies,
+            key=lambda enemy: self.center_screen.distance_to(enemy.pos),
+        )[0]
 
     def can_move_to(self, new_numpy_position: pygame.Vector2) -> bool:
         """

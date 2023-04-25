@@ -17,8 +17,10 @@ from wwd.weapons import MeeleeWeapon, RangedWeapon
 PLAYER_SCALE_FACTOR = 2.5
 ENEMY_SCALE_FACTOR = 1.0
 
+# Movement and following
 ENEMY_FOLLOW_DIST = 800
 ENEMY_MOVE_SPEED = 100
+PANKO_MOVEMENT_SPEED = 200
 
 # Enemy starting health
 ENEMY_HEALTH = 49
@@ -27,8 +29,9 @@ ENEMY_HEALTH = 49
 HEALTH_REGEN_RATE = 5
 
 # Damage done to player by enemy contact
-ENEMY_COLLISION_DAMAGE = 1
+ENEMY_COLLISION_DAMAGE = 20
 WEAPON_COLLISION_DAMAGE = 50
+PANKO_BITE_DAMAGE = 30
 
 
 class AnimationFrame(Enum):
@@ -121,6 +124,13 @@ class Character(pygame.sprite.Sprite):
             self.screen, "red", health_bar_inflection_point, health_bar_right, width=2
         )
 
+    def regenerate_health(self, dt: float) -> None:
+        """
+        Regenrate character health
+        """
+        if self.health < self.max_health:
+            self.health = min(self.max_health, self.health + HEALTH_REGEN_RATE * dt)
+
 
 class Player(Character):
     """
@@ -168,7 +178,7 @@ class Player(Character):
         # Check collisions
         if self in player_enemy_collisions:
             for _ in player_enemy_collisions[self]:
-                self.health -= ENEMY_COLLISION_DAMAGE
+                self.health -= ENEMY_COLLISION_DAMAGE * dt
 
         # Check weapons & keypresses
         if scroll_wheel or keys[pygame.K_SPACE]:
@@ -179,9 +189,7 @@ class Player(Character):
         ):
             self.active_weapon.attack()
 
-        # Regenerate health
-        if self.health < self.max_health:
-            self.health = min(self.max_health, self.health + HEALTH_REGEN_RATE * dt)
+        self.regenerate_health(dt=dt)
 
         # Perform generic character update
         super().update()
@@ -246,27 +254,77 @@ class Pet(Character):
     Class for friendly pets
     """
 
-    def __init__(self, pos: pygame.Vector2):
+    def __init__(
+        self,
+        pos: pygame.Vector2,
+        player: Player,
+        screen: pygame.Surface,
+    ):
         """
         Construct the player
         """
         fwd_image = pygame.transform.smoothscale_by(
             pygame.image.load(
-                Path("../assets/sprites/player/forward/regular.png")
+                Path("../assets/sprites/panko/regular.png")
             ).convert_alpha(),
             PLAYER_SCALE_FACTOR,
         )
         super().__init__(
-            pos=pos, sprites={AnimationFrame.REGULAR: fwd_image}, max_health=100
+            pos=pos,
+            sprites={AnimationFrame.REGULAR: fwd_image},
+            max_health=ENEMY_HEALTH,
+            screen=screen,
         )
+        self.is_attacking = False
         self.meelee_weapon = None
+        self.player = player
+        self.targeted_enemy = None
 
     def update(
         self,
         scroll_delta: pygame.Vector2,
-        player_enemy_collisions: CollisionsDict,
+        dt: float,
+        pet_enemy_collisions: CollisionsDict,
     ) -> None:
         """
         Update player
         """
+        self.regenerate_health(dt=dt)
+
+        if not self.targeted_enemy.alive():
+            self.is_attacking = False
+
+        if self.is_attacking:
+
+            # Move with bg scroll
+            self.pos += scroll_delta
+            self.rect.center = self.pos
+
+            # Move towards enemy
+            self.pos.move_towards_ip(self.targeted_enemy.pos, PANKO_MOVEMENT_SPEED * dt)
+
+            if self in pet_enemy_collisions and self.is_attacking:
+                # Update damage to self
+                self.health -= (
+                    len(pet_enemy_collisions[self]) * ENEMY_COLLISION_DAMAGE * dt
+                )
+
+                # Update damage to targeted enemy
+                if self.targeted_enemy in pet_enemy_collisions[self]:
+                    self.targeted_enemy.health -= PANKO_BITE_DAMAGE * dt
+
         super().update()
+
+    def kill(self) -> None:
+        """
+        Kill the pet
+        """
+        self.is_attacking = False
+        super().kill()
+
+    def attack(self, enemy: Enemy) -> None:
+        """
+        Target and begin attacking an enemy
+        """
+        self.targeted_enemy = enemy
+        self.is_attacking = True
