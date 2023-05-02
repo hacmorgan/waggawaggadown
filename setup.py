@@ -22,5 +22,5 @@ setup(
         "Pillow",
         "pygame",
     ],
-    scripts=[],
+    entry_points={"console_scripts": ["waggawaggadown=wwd.main:main"]},
 )
